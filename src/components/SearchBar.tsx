@@ -5,6 +5,7 @@ import { Search, MapPin, X, Navigation, Loader2 } from 'lucide-react';
 
 interface SearchBarProps {
   onSelectCity: (city: GeoLocationItem) => void;
+  onSearchQuery: (query: string) => void;
   onUseMyLocation: () => void;
   isLocating?: boolean;
 }
@@ -21,6 +22,7 @@ const POPULAR_CITIES: GeoLocationItem[] = [
 
 export const SearchBar: React.FC<SearchBarProps> = ({
   onSelectCity,
+  onSearchQuery,
   onUseMyLocation,
   isLocating = false,
 }) => {
@@ -98,8 +100,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (suggestions.length > 0) {
-      handleSelect(suggestions[selectedIndex >= 0 ? selectedIndex : 0]);
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    if (isOpen && selectedIndex >= 0 && selectedIndex < suggestions.length) {
+      handleSelect(suggestions[selectedIndex]);
+    } else {
+      onSearchQuery(trimmed);
+      setIsOpen(false);
     }
   };
 
@@ -107,13 +115,17 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     <div className="w-full space-y-3">
       <div className="relative" ref={dropdownRef}>
         <form onSubmit={handleFormSubmit} className="relative flex items-center">
-          <div className="absolute left-4 text-slate-400 pointer-events-none">
+          <button
+            type="submit"
+            aria-label="Search city"
+            className="absolute left-3.5 p-1 text-slate-400 hover:text-sky-600 transition-colors z-10"
+          >
             {isLoading ? (
               <Loader2 className="w-5 h-5 animate-spin text-sky-500" />
             ) : (
               <Search className="w-5 h-5" />
             )}
-          </div>
+          </button>
 
           <input
             type="text"

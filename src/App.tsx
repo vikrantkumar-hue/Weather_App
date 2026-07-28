@@ -5,7 +5,7 @@ import {
   TemperatureUnit, 
   WindUnit 
 } from './types/weather';
-import { getWeatherData, reverseGeocode } from './services/weatherApi';
+import { getWeatherData, reverseGeocode, searchCities } from './services/weatherApi';
 import { Header } from './components/Header';
 import { SearchBar } from './components/SearchBar';
 import { CurrentWeatherCard } from './components/CurrentWeatherCard';
@@ -55,8 +55,12 @@ export default function App() {
 
   // Fetch weather function
   const fetchWeatherForLocation = useCallback(async (location: GeoLocationItem, silent = false) => {
-    if (!silent) setIsLoading(true);
-    else setIsRefreshing(true);
+    if (!silent) {
+      setIsLoading(true);
+      setWeatherData(null); // Explicitly clear weatherData when a new search/fetch starts
+    } else {
+      setIsRefreshing(true);
+    }
     
     setError(null);
 
@@ -67,12 +71,43 @@ export default function App() {
       localStorage.setItem('wi_selected_city', JSON.stringify(location));
       setLastUpdated(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
     } catch (err: any) {
+      setWeatherData(null); // Explicitly clear weatherData on API error
       setError(err.message || 'Failed to retrieve weather data for this location. Please try again.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   }, []);
+
+  // Search by text query string (e.g. searching "QZX998877" or "Tokyo")
+  const handleSearchQuery = async (queryText: string) => {
+    const trimmed = queryText.trim();
+    if (!trimmed) return;
+
+    setIsLoading(true);
+    setWeatherData(null); // Explicitly clear weatherData immediately when a new search starts
+    setError(null);
+
+    try {
+      const results = await searchCities(trimmed);
+      if (!results || results.length === 0) {
+        setWeatherData(null); // Explicitly set weatherData to null on city lookup error
+        setError(`No location found matching "${trimmed}". Please check the spelling and try another search.`);
+      } else {
+        const topResult = results[0];
+        const data = await getWeatherData(topResult);
+        setWeatherData(data);
+        setSelectedCity(topResult);
+        localStorage.setItem('wi_selected_city', JSON.stringify(topResult));
+        setLastUpdated(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
+      }
+    } catch (err: any) {
+      setWeatherData(null); // Explicitly set weatherData to null on error
+      setError(err.message || `Failed to search weather for "${trimmed}". Please try again.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Initial load
   useEffect(() => {
@@ -93,11 +128,13 @@ export default function App() {
   // GPS Geolocation trigger
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
+      setWeatherData(null);
       setError('Geolocation is not supported by your browser.');
       return;
     }
 
     setIsLocating(true);
+    setWeatherData(null); // Explicitly clear weatherData when location search starts
     setError(null);
 
     navigator.geolocation.getCurrentPosition(
@@ -108,6 +145,7 @@ export default function App() {
           const loc = await reverseGeocode(lat, lon);
           await fetchWeatherForLocation(loc);
         } catch (err: any) {
+          setWeatherData(null);
           setError('Unable to fetch weather for your exact coordinates.');
         } finally {
           setIsLocating(false);
@@ -115,6 +153,7 @@ export default function App() {
       },
       (geoErr) => {
         setIsLocating(false);
+        setWeatherData(null);
         if (geoErr.code === geoErr.PERMISSION_DENIED) {
           setError('Location access was denied. Please search for your city manually in the search bar.');
         } else {
@@ -143,6 +182,7 @@ export default function App() {
         {/* Search Bar */}
         <SearchBar
           onSelectCity={(city) => fetchWeatherForLocation(city)}
+          onSearchQuery={handleSearchQuery}
           onUseMyLocation={handleUseMyLocation}
           isLocating={isLocating}
         />
